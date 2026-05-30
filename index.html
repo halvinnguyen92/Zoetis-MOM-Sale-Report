@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zoetis Thú Cưng — Shopee Report</title>
+<style>
+/* ── CONFIG: đổi URL này sau khi publish Google Sheets ── */
+/* SHEET_CSV_URL được set trong JS bên dưới */
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f9fa;color:#111;min-height:100vh}
+.page{max-width:960px;margin:0 auto;padding:24px 20px}
+
+/* Header */
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.2rem;gap:10px}
+.title{font-size:18px;font-weight:600;color:#111}
+.sub{font-size:12px;color:#666;margin-top:3px}
+.badges{display:flex;gap:5px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;padding:3px 8px;border-radius:6px;background:#f0f0f0;color:#555}
+.badge.green{background:#d1fae5;color:#065f46}
+.badge.red{background:#fee2e2;color:#991b1b}
+
+/* Loading / Error states */
+.state-box{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:60px 20px;text-align:center}
+.spinner{width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#378ADD;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.state-title{font-size:15px;font-weight:500;color:#333}
+.state-sub{font-size:13px;color:#888;max-width:420px;line-height:1.6}
+.config-box{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:20px;max-width:520px;text-align:left;margin-top:8px}
+.config-box label{font-size:12px;font-weight:500;color:#555;display:block;margin-bottom:6px}
+.config-box input{width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;outline:none}
+.config-box input:focus{border-color:#378ADD;box-shadow:0 0 0 3px rgba(55,138,221,.12)}
+.config-btn{margin-top:10px;padding:8px 18px;background:#378ADD;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer}
+.config-btn:hover{background:#2970b8}
+
+/* Controls */
+.controls{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:1rem}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:0}
+.row+.row{margin-top:8px}
+.lbl{font-size:12px;color:#666;margin-right:2px;white-space:nowrap;font-weight:500}
+.btn{font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #d4d4d8;background:transparent;color:#666;cursor:pointer;transition:.12s;white-space:nowrap}
+.btn:hover{background:#f4f4f5;color:#333}
+.btn.active{background:#dbeafe;color:#1d4ed8;border-color:#bfdbfe;font-weight:500}
+.sep{width:1px;height:18px;background:#e4e4e7;margin:0 4px}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem}
+@media(max-width:640px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px}
+.kpi-lbl{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.kpi-val{font-size:22px;font-weight:600;color:#111;line-height:1.1}
+.kpi-sub{font-size:11px;color:#888;margin-top:3px}
+.pill{display:inline-block;font-size:11px;padding:2px 7px;border-radius:5px;margin-top:5px}
+.pw{background:#fef3c7;color:#92400e}
+.pg{background:#d1fae5;color:#065f46}
+.pr{background:#fee2e2;color:#991b1b}
+
+/* Cards */
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:1rem}
+.card-title{font-size:13px;font-weight:600;color:#111;margin-bottom:2px}
+.card-sub{font-size:11px;color:#666;margin-bottom:12px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:#666;margin-bottom:10px}
+.legend span{display:flex;align-items:center;gap:5px}
+.ld{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+/* Product section */
+.prod-section{display:grid;grid-template-columns:1fr 1.7fr;gap:16px;align-items:start}
+@media(max-width:640px){.prod-section{grid-template-columns:1fr}}
+.prod-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.prod-tbl th{text-align:left;font-weight:500;font-size:11px;color:#666;padding:5px 7px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.prod-tbl td{padding:5px 7px;border-bottom:1px solid #f8f8f8;color:#111}
+.prod-tbl tr:last-child td{border-bottom:none}
+.prod-tbl tr:hover td{background:#fafafa}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar-bg{background:#f0f0f0;border-radius:2px;height:5px;margin-top:3px}
+.bar-fill{border-radius:2px;height:5px;transition:width .3s}
+.gtag{font-size:10px;padding:1px 5px;border-radius:3px;margin-right:4px;font-weight:500}
+
+/* Last updated */
+.footer{font-size:11px;color:#aaa;text-align:center;padding-top:8px;padding-bottom:4px}
+.refresh-btn{background:none;border:none;color:#888;font-size:11px;cursor:pointer;text-decoration:underline;padding:0}
+.refresh-btn:hover{color:#333}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════ LOADING STATE -->
+<div id="loading-state" class="state-box">
+  <div class="spinner"></div>
+  <div class="state-title">Đang tải dữ liệu từ Google Sheets…</div>
+  <div class="state-sub">Vui lòng chờ trong giây lát</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ CONFIG STATE (shown when no URL set) -->
+<div id="config-state" class="state-box" style="display:none">
+  <div class="state-title">⚙️ Cần cấu hình Google Sheets</div>
+  <div class="state-sub">Nhập URL CSV của Google Sheets để report tự động đọc data mới nhất mỗi khi mở.</div>
+  <div class="config-box">
+    <label>URL CSV của Google Sheets (sheet "orders")</label>
+    <input type="text" id="sheet-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=0">
+    <br>
+    <button class="config-btn" onclick="saveAndLoad()">Lưu & Tải dữ liệu</button>
+    <div style="margin-top:12px;font-size:12px;color:#888;line-height:1.7">
+      <b>Cách lấy URL:</b><br>
+      1. Mở Google Sheets → File → Share → Publish to web<br>
+      2. Chọn sheet <b>"orders"</b> → Format: <b>Comma-separated values (.csv)</b><br>
+      3. Nhấn Publish → Copy link → Paste vào ô trên
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ ERROR STATE -->
+<div id="error-state" class="state-box" style="display:none">
+  <div class="state-title">⚠️ Không thể tải dữ liệu</div>
+  <div class="state-sub" id="error-msg"></div>
+  <div class="config-box">
+    <label>Thử lại với URL khác</label>
+    <input type="text" id="sheet-url-retry" placeholder="https://docs.google.com/spreadsheets/d/...">
+    <br>
+    <button class="config-btn" onclick="retryLoad()">Thử lại</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ MAIN REPORT -->
+<div id="report" style="display:none">
+
+<div class="hdr">
+  <div>
+    <div class="title">Zoetis Thú Cưng — Shopee</div>
+    <div class="sub" id="hdr-sub">GMV = Listed Price − Seller Discount · % GMV hủy = GMV hủy / Total GMV</div>
+  </div>
+  <div class="badges">
+    <span class="badge">Shopee</span>
+    <span class="badge" id="pb">—</span>
+    <span class="badge green" id="last-updated">—</span>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="row">
+    <span class="lbl">Góc nhìn:</span>
+    <button class="btn active" onclick="setView('gmv',this)">GMV</button>
+    <button class="btn" onclick="setView('order',this)">Order Volume</button>
+    <div class="sep"></div>
+    <span class="lbl">Tháng:</span>
+    <button class="btn active" onclick="setM('all',this)">Tất cả</button>
+    <div id="month-btns"></div>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-lbl" id="k1l">GMV Hợp lệ</div><div class="kpi-val" id="k1v">—</div><div class="kpi-sub" id="k1s">—</div></div>
+  <div class="kpi"><div class="kpi-lbl" id="k2l">GMV Đơn hủy</div><div class="kpi-val" id="k2v">—</div><div class="kpi-sub" id="k2s">—</div><span class="pill pw" id="k2p">—</span></div>
+  <div class="kpi"><div class="kpi-lbl" id="k3l">% GMV Hủy</div><div class="kpi-val" id="k3v">—</div><div class="kpi-sub" id="k3s">= GMV hủy / Total GMV</div></div>
+  <div class="kpi"><div class="kpi-lbl" id="k4l">Avg GMV / Đơn</div><div class="kpi-val" id="k4v">—</div><div class="kpi-sub" id="k4s">—</div><span class="pill pg" id="k4p">—</span></div>
+</div>
+
+<div class="card">
+  <div class="card-title" id="ct">Doanh thu GMV theo tháng</div>
+  <div class="card-sub" id="cd">Cột xanh = GMV hợp lệ · Cột xám (stacked) = GMV đơn hủy · Đường cam = % GMV hủy</div>
+  <div class="legend">
+    <span><span class="ld" style="background:#378ADD"></span><span id="leg1">GMV hợp lệ</span></span>
+    <span><span class="ld" style="background:#CBD5E1"></span><span id="leg2">GMV đơn hủy (stacked)</span></span>
+    <span><span class="ld" style="background:#E07B39;border-radius:0;height:3px;width:14px"></span><span id="leg3">% GMV hủy (= hủy/Total GMV)</span></span>
+  </div>
+  <div style="position:relative;width:100%;height:255px"><canvas id="mainC"></canvas></div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+    <span class="card-title">SKU Performance</span>
+    <span style="font-size:11px;color:#666" id="pc">—</span>
+  </div>
+  <div class="card-sub">Contribution theo Group + detail theo sản phẩm</div>
+  <div class="prod-section">
+    <div>
+      <div style="font-size:12px;font-weight:500;color:#111;margin-bottom:8px">Contribution theo Group</div>
+      <div style="position:relative;width:100%;height:200px"><canvas id="donutC"></canvas></div>
+      <div id="donut-legend" style="display:flex;flex-direction:column;gap:5px;margin-top:10px;font-size:12px;color:#666"></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="prod-tbl">
+        <thead><tr>
+          <th>#</th><th>Sản phẩm</th>
+          <th class="num">SL</th>
+          <th class="num" style="min-width:100px">GMV (VND)</th>
+          <th class="num">%</th>
+          <th style="min-width:80px"></th>
+        </tr></thead>
+        <tbody id="prod-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Data cập nhật lần cuối: <span id="refresh-time">—</span> &nbsp;·&nbsp;
+  <button class="refresh-btn" onclick="loadData()">↻ Tải lại</button>
+  &nbsp;·&nbsp;
+  <button class="refresh-btn" onclick="changeSheet()">⚙ Đổi Sheets URL</button>
+</div>
+
+</div><!-- /report -->
+</div><!-- /page -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIG — đổi URL này sau khi publish Google Sheets của bạn
+// Để trống '' nếu muốn nhập qua UI
+// ══════════════════════════════════════════════════════════════
+const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbe4FOkZzo49IRKjRlwsyc1mloxXnyty17im4qoWBFpXqj-7CqbLc9MWEn_hGVgA/pub?gid=1986771646&single=true&output=csv';
+// Ví dụ:
+// const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/export?format=csv&gid=0';
+
+// ══════════════════════════════════════════════════════════════
+// Column mapping — tên cột trong Google Sheets của bạn
+// Nếu bạn paste raw data từ Shopee, các tên này khớp với file Excel
+// ══════════════════════════════════════════════════════════════
+const COL = {
+  orderDate:   'Ngày đặt hàng',     // format: "2025-07-07 09:43"
+  status:      'Trạng Thái Đơn Hàng',
+  orderId:     'Mã đơn hàng',
+  product:     'Sản phẩm',          // cột cleaned "Sản phẩm" (cột BQ trong Excel gốc)
+  gmv:         'GMV',
+  listedPrice: 'Listed Price',
+  sellerDisc:  'Seller Discount',
+  qty:         'Số lượng',
+};
+
+const CANCELLED_STATUS = 'Đã hủy';
+
+// Product group mapping
+const GROUP_MAP = {
+  'Revolution':      p => p.startsWith('Revolution'),
+  'Simparica Trio':  p => p.startsWith('Simparica Trio'),
+  'Simparica':       p => p.startsWith('Simparica') && !p.startsWith('Simparica Trio'),
+  'Khác':            p => true
+};
+const GC = {"Revolution":"#378ADD","Simparica":"#1D9E75","Simparica Trio":"#D85A30","Khác":"#9CA3AF"};
+const GO = ["Revolution","Simparica Trio","Simparica","Khác"];
+
+function getGroup(name){
+  for(const [g, fn] of Object.entries(GROUP_MAP)){
+    if(fn(name||'')) return g;
+  }
+  return 'Khác';
+}
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let curM = 'all', curV = 'gmv';
+let mainChart, donutChart;
+let MO = [], DA = {}, PR = {};
+let allMonths = [];
+
+const fmtM  = v => (Math.round(v/100000)/10).toFixed(1)+'M';
+const fmtK  = v => v>=1e6 ? fmtM(v) : Math.round(v/1000)+'K';
+const fmtN  = v => (+v).toLocaleString('vi-VN');
+
+// ══════════════════════════════════════════════════════════════
+// SHEET URL management
+// ══════════════════════════════════════════════════════════════
+function getSheetUrl(){
+  return localStorage.getItem('zoetis_sheet_url') || DEFAULT_SHEET_URL || '';
+}
+function saveSheetUrl(url){
+  localStorage.setItem('zoetis_sheet_url', url.trim());
+}
+function saveAndLoad(){
+  const url = document.getElementById('sheet-url-input').value.trim();
+  if(!url){ alert('Vui lòng nhập URL'); return; }
+  saveSheetUrl(url);
+  loadData();
+}
+function retryLoad(){
+  const url = document.getElementById('sheet-url-retry').value.trim();
+  if(url) saveSheetUrl(url);
+  loadData();
+}
+function changeSheet(){
+  const url = prompt('Nhập URL CSV mới của Google Sheets:', getSheetUrl());
+  if(url !== null){
+    saveSheetUrl(url);
+    loadData();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// LOAD & PARSE DATA
+// ══════════════════════════════════════════════════════════════
+async function loadData(){
+  const url = getSheetUrl();
+
+  showState('loading');
+
+  if(!url){
+    showState('config');
+    return;
+  }
+
+  try {
+    // Add cache-busting to always get fresh data
+    const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+    const res = await fetch(fetchUrl);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const csv = await res.text();
+    parseAndRender(csv);
+  } catch(e) {
+    showState('error', `Không fetch được dữ liệu từ Sheets.<br><br>Lỗi: <code>${e.message}</code><br><br>Hãy kiểm tra:<br>• URL có đúng không?<br>• Sheet đã được "Publish to web" chưa?<br>• Sheet có tên đúng là "orders" không?`);
+  }
+}
+
+function parseCSV(text){
+  const lines = text.split('\n').filter(l => l.trim());
+  if(lines.length < 2) return [];
+  
+  function splitRow(line){
+    const res = [];
+    let inQ = false, cur = '';
+    for(let i = 0; i < line.length; i++){
+      const c = line[i];
+      if(c === '"') { inQ = !inQ; continue; }
+      if(c === ',' && !inQ){ res.push(cur); cur = ''; continue; }
+      cur += c;
+    }
+    res.push(cur);
+    return res;
+  }
+
+  const headers = splitRow(lines[0]).map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = splitRow(line);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (vals[i]||'').trim(); });
+    return obj;
+  });
+}
+
+function parseAndRender(csv){
+  const rows = parseCSV(csv);
+  if(!rows.length){
+    showState('error', 'File CSV trống hoặc không đọc được. Kiểm tra lại Google Sheets.');
+    return;
+  }
+
+  // Check required columns exist
+  const sample = rows[0];
+  const missing = Object.values(COL).filter(c => !(c in sample));
+  if(missing.length > 0){
+    showState('error', `Không tìm thấy cột: <b>${missing.join(', ')}</b><br><br>Hãy chắc chắn sheet có các cột đúng tên theo file Excel gốc của Shopee (đặc biệt cột <b>"Sản phẩm"</b> ở cuối). Xem hướng dẫn setup.`);
+    return;
+  }
+
+  // ── Build aggregations ─────────────────────────────────────
+  const monthMap   = {};  // ym → {gmv, cgmv, vo, co}
+  const dayMap     = {};  // ym → day → {gmv, cgmv, vo, co}
+  const prodAllMap = {};  // prodName → {gmv, qty, g}
+  const prodMonMap = {};  // ym → prodName → {gmv, qty, g}
+
+  // Track unique order IDs to count orders (not rows)
+  const orderSeen  = new Set();
+
+  rows.forEach(r => {
+    const dateStr  = r[COL.orderDate]||'';
+    const ym       = dateStr.slice(0,7);  // "2025-07"
+    const dd       = parseInt(dateStr.slice(8,10))||0;
+    if(!ym || ym.length !== 7) return;
+
+    const isCancelled = (r[COL.status]||'').trim() === CANCELLED_STATUS;
+    const isGift      = (r[COL.product]||'').toUpperCase().startsWith('GIFT');
+    const gmv         = parseFloat(r[COL.gmv])||0;
+    const qty         = parseInt(r[COL.qty])||0;
+    const orderId     = r[COL.orderId]||'';
+    const prod        = r[COL.product]||'';
+    const group       = getGroup(prod);
+
+    // Month
+    if(!monthMap[ym]) monthMap[ym] = {m:ym, gmv:0, cgmv:0, vo:0, co:0, _orders:new Set(), _corders:new Set()};
+    if(!dayMap[ym])   dayMap[ym]   = {};
+    if(!dayMap[ym][dd]) dayMap[ym][dd] = {d:dd, gmv:0, cgmv:0, vo:0, co:0, _orders:new Set(), _corders:new Set()};
+
+    if(isCancelled){
+      monthMap[ym].cgmv += gmv;
+      dayMap[ym][dd].cgmv += gmv;
+      if(orderId && !monthMap[ym]._corders.has(orderId)){
+        monthMap[ym]._corders.add(orderId);
+        monthMap[ym].co++;
+        dayMap[ym][dd]._corders.add(orderId);
+        dayMap[ym][dd].co++;
+      }
+    } else {
+      monthMap[ym].gmv += gmv;
+      dayMap[ym][dd].gmv += gmv;
+      if(orderId && !monthMap[ym]._orders.has(orderId)){
+        monthMap[ym]._orders.add(orderId);
+        monthMap[ym].vo++;
+        dayMap[ym][dd]._orders.add(orderId);
+        dayMap[ym][dd].vo++;
+      }
+      // Products (only valid orders, skip gifts)
+      if(!isGift && prod){
+        if(!prodAllMap[prod]) prodAllMap[prod] = {n:prod, g:group, gmv:0, qty:0};
+        prodAllMap[prod].gmv += gmv;
+        prodAllMap[prod].qty += qty;
+
+        if(!prodMonMap[ym]) prodMonMap[ym] = {};
+        if(!prodMonMap[ym][prod]) prodMonMap[ym][prod] = {n:prod, g:group, gmv:0, qty:0};
+        prodMonMap[ym][prod].gmv += gmv;
+        prodMonMap[ym][prod].qty += qty;
+      }
+    }
+  });
+
+  // Sort months
+  allMonths = Object.keys(monthMap).sort();
+
+  // Build MO array
+  MO = allMonths.map(ym => {
+    const ml = fmtMonthLabel(ym);
+    return {m:ym, ml, gmv:monthMap[ym].gmv, cgmv:monthMap[ym].cgmv, vo:monthMap[ym].vo, co:monthMap[ym].co};
+  });
+
+  // Build DA (daily)
+  DA = {};
+  allMonths.forEach(ym => {
+    DA[ym] = Object.values(dayMap[ym]).sort((a,b)=>a.d-b.d);
+  });
+
+  // Build PR (products)
+  const sortProds = arr => arr.sort((a,b) => b.gmv - a.gmv);
+  PR = {all: sortProds(Object.values(prodAllMap))};
+  allMonths.forEach(ym => {
+    PR[ym] = prodMonMap[ym] ? sortProds(Object.values(prodMonMap[ym])) : [];
+  });
+
+  // ── Build month buttons ────────────────────────────────────
+  const mb = document.getElementById('month-btns');
+  mb.innerHTML = '';
+  allMonths.forEach(ym => {
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = fmtMonthLabel(ym);
+    btn.onclick = function(){ setM(ym, this); };
+    mb.appendChild(btn);
+  });
+
+  // Update date range badge
+  if(allMonths.length){
+    const first = fmtMonthLabel(allMonths[0]);
+    const last  = fmtMonthLabel(allMonths[allMonths.length-1]);
+    document.getElementById('pb').textContent = first === last ? first : first+'–'+last;
+  }
+
+  // Update refresh time
+  document.getElementById('refresh-time').textContent = new Date().toLocaleString('vi-VN');
+
+  // Show report
+  showState('report');
+  curM = 'all';
+  curV = 'gmv';
+  // Reset button states
+  document.querySelectorAll('.btn').forEach(b=>{
+    if(b.getAttribute('onclick')?.startsWith('setView')) b.classList.toggle('active', b.getAttribute('onclick').includes("'gmv'"));
+    if(b.getAttribute('onclick')?.startsWith('setM')) b.classList.toggle('active', b.getAttribute('onclick').includes("'all'"));
+  });
+  render();
+}
+
+function fmtMonthLabel(ym){
+  const [y, m] = ym.split('-');
+  return 'T'+parseInt(m)+'/'+y.slice(2);
+}
+
+// ══════════════════════════════════════════════════════════════
+// SHOW/HIDE STATES
+// ══════════════════════════════════════════════════════════════
+function showState(state, msg=''){
+  document.getElementById('loading-state').style.display = state==='loading' ? 'flex' : 'none';
+  document.getElementById('config-state').style.display  = state==='config'  ? 'flex' : 'none';
+  document.getElementById('error-state').style.display   = state==='error'   ? 'flex' : 'none';
+  document.getElementById('report').style.display        = state==='report'  ? 'block': 'none';
+  if(state==='error') document.getElementById('error-msg').innerHTML = msg;
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════════════════════
+function render(){
+  const isAll  = curM === 'all';
+  const moRow  = MO.find(r => r.m === curM);
+  const ml     = moRow?.ml || curM;
+  const rows   = isAll ? MO : (DA[curM]||[]).map(r => ({ml:'Ng.'+r.d, ...r}));
+
+  renderKPI(rows);
+  renderMain(rows, !isAll, ml);
+  const prods = PR[isAll ? 'all' : curM] || PR['all'] || [];
+  renderDonut(prods);
+  renderProds(prods);
+}
+
+function renderKPI(rows){
+  const gmv  = rows.reduce((s,r)=>s+r.gmv,0);
+  const cgmv = rows.reduce((s,r)=>s+r.cgmv,0);
+  const vo   = rows.reduce((s,r)=>s+r.vo,0);
+  const co   = rows.reduce((s,r)=>s+r.co,0);
+  const totalGMV = gmv + cgmv;
+  const totalOrd = vo + co;
+  const cr   = totalGMV > 0 ? cgmv / totalGMV * 100 : 0;
+  const ocr  = totalOrd > 0 ? co   / totalOrd * 100  : 0;
+  const avg  = vo > 0 ? gmv / vo : 0;
+
+  if(curV === 'gmv'){
+    document.getElementById('k1l').textContent = 'GMV Hợp lệ';
+    document.getElementById('k1v').textContent = fmtM(gmv);
+    document.getElementById('k1s').textContent = vo+' đơn hợp lệ';
+    document.getElementById('k2l').textContent = 'GMV Đơn hủy';
+    document.getElementById('k2v').textContent = fmtM(cgmv);
+    document.getElementById('k2s').textContent = co+' đơn bị hủy';
+    document.getElementById('k2p').textContent = cr.toFixed(1)+'% / Total GMV';
+    document.getElementById('k2p').className   = 'pill pw';
+    document.getElementById('k3l').textContent = '% GMV Hủy';
+    document.getElementById('k3v').textContent = cr.toFixed(1)+'%';
+    document.getElementById('k3s').textContent = '= GMV hủy / Total GMV';
+    document.getElementById('hdr-sub').textContent = 'GMV = Listed Price − Seller Discount · % GMV hủy = GMV hủy / Total GMV';
+  } else {
+    document.getElementById('k1l').textContent = 'Đơn hợp lệ';
+    document.getElementById('k1v').textContent = vo.toLocaleString();
+    document.getElementById('k1s').textContent = '/ '+totalOrd+' tổng đơn';
+    document.getElementById('k2l').textContent = 'Đơn bị hủy';
+    document.getElementById('k2v').textContent = co.toLocaleString();
+    document.getElementById('k2s').textContent = '/ '+totalOrd+' tổng đơn';
+    document.getElementById('k2p').textContent = ocr.toFixed(1)+'% / Total Order';
+    document.getElementById('k2p').className   = 'pill pw';
+    document.getElementById('k3l').textContent = '% Order Hủy';
+    document.getElementById('k3v').textContent = ocr.toFixed(1)+'%';
+    document.getElementById('k3s').textContent = '= Đơn hủy / Total Order';
+    document.getElementById('hdr-sub').textContent = 'GMV = Listed Price − Seller Discount · % Order hủy = Đơn hủy / Total Order';
+  }
+  document.getElementById('k4l').textContent = 'Avg GMV / Đơn';
+  document.getElementById('k4v').textContent = fmtK(avg);
+  document.getElementById('k4s').textContent = fmtM(gmv)+' / '+vo+' đơn';
+  document.getElementById('k4p').textContent = vo+' đơn hợp lệ';
+}
+
+function renderMain(rows, isDaily, ml){
+  const isGMV   = curV === 'gmv';
+  const labels  = rows.map(r => r.ml||('Ng.'+r.d));
+  const validD  = rows.map(r => isGMV ? +(r.gmv /1e6).toFixed(3) : r.vo);
+  const cancelD = rows.map(r => isGMV ? +(r.cgmv/1e6).toFixed(3) : r.co);
+  const crD     = rows.map(r => {
+    const total  = isGMV ? (r.gmv+r.cgmv) : (r.vo+r.co);
+    const cancel = isGMV ? r.cgmv : r.co;
+    return total > 0 ? +(cancel/total*100).toFixed(1) : 0;
+  });
+
+  document.getElementById('ct').textContent = isDaily
+    ? (isGMV?'Doanh thu GMV':'Order Volume')+' theo ngày — '+ml
+    : (isGMV?'Doanh thu GMV':'Order Volume')+' theo tháng';
+  document.getElementById('cd').textContent = isGMV
+    ? 'Cột xanh = GMV hợp lệ · Cột xám (stacked) = GMV đơn hủy · Đường cam = % GMV hủy (= hủy/Total GMV)'
+    : 'Cột xanh = Đơn hợp lệ · Cột xám (stacked) = Đơn hủy · Đường cam = % Order hủy (= hủy/Total Order)';
+  document.getElementById('leg1').textContent = isGMV?'GMV hợp lệ':'Đơn hợp lệ';
+  document.getElementById('leg2').textContent = isGMV?'GMV đơn hủy (stacked)':'Đơn hủy (stacked)';
+  document.getElementById('leg3').textContent = isGMV?'% GMV hủy = hủy/Total GMV':'% Order hủy = hủy/Total Order';
+
+  if(mainChart) mainChart.destroy();
+  mainChart = new Chart(document.getElementById('mainC'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: isGMV?'GMV hợp lệ':'Đơn hợp lệ',  data: validD,  backgroundColor:'#378ADD', borderRadius:0, borderSkipped:false, stack:'main', yAxisID:'y', order:2 },
+        { label: isGMV?'GMV đơn hủy':'Đơn hủy',     data: cancelD, backgroundColor:'#CBD5E1', borderRadius:3, borderSkipped:false, stack:'main', yAxisID:'y', order:2 },
+        { type:'line', label:'% Hủy', data:crD, borderColor:'#E07B39', backgroundColor:'rgba(224,123,57,0.05)',
+          borderWidth:2, pointRadius:isDaily?2.5:4, pointBackgroundColor:'#E07B39', yAxisID:'y2', order:1, tension:0.3, fill:false }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title: tt => isDaily ? 'Ngày '+rows[tt[0].dataIndex].d+' ('+ml+')' : rows[tt[0].dataIndex].ml,
+          label: c => {
+            if(c.datasetIndex===0) return isGMV?' GMV hợp lệ: '+c.raw+'M VND':' Đơn hợp lệ: '+c.raw;
+            if(c.datasetIndex===1) return isGMV?' GMV hủy: '+c.raw+'M VND':' Đơn hủy: '+c.raw;
+            return (isGMV?' % GMV hủy (hủy/Total GMV): ':' % Order hủy (hủy/Total Order): ')+c.raw+'%';
+          }
+        }}
+      },
+      scales:{
+        x:{ stacked:true, grid:{display:false}, ticks:{font:{size:isDaily?9:11},autoSkip:isDaily,maxRotation:isDaily?45:0,maxTicksLimit:isDaily?20:9} },
+        y:{ stacked:true, grid:{color:'rgba(128,128,128,0.07)'}, ticks:{font:{size:11},callback:v=>isGMV?v+'M':v}, title:{display:true,text:isGMV?'Triệu VND':'Đơn hàng',font:{size:10},color:'#888'} },
+        y2:{ position:'right', grid:{display:false}, ticks:{font:{size:11},callback:v=>v+'%'}, title:{display:true,text:'% Hủy',font:{size:10},color:'#E07B39'}, min:0 }
+      }
+    }
+  });
+}
+
+function renderDonut(prods){
+  const gm = {};
+  prods.forEach(p => { const g = p.g||'Khác'; gm[g] = (gm[g]||0)+p.gmv; });
+  const gl = GO.filter(g => gm[g]>0);
+  const gv = gl.map(g => gm[g]);
+  const gc = gl.map(g => GC[g]);
+  const tot = gv.reduce((s,v)=>s+v,0);
+  if(donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById('donutC'), {
+    type: 'doughnut',
+    data: {labels:gl, datasets:[{data:gv,backgroundColor:gc,borderWidth:2,borderColor:'transparent',hoverOffset:4}]},
+    options: {responsive:true,maintainAspectRatio:false,cutout:'60%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.label+': '+fmtM(c.raw)+' ('+Math.round(c.raw/tot*100)+'%)'}}}}
+  });
+  const leg = document.getElementById('donut-legend');
+  leg.innerHTML = '';
+  gl.forEach((g,i) => {
+    const pct = Math.round(gv[i]/tot*100);
+    leg.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:${gc[i]};flex-shrink:0"></span>${g}</span>
+      <span style="font-weight:500;color:#111">${fmtM(gv[i])} <span style="font-weight:400;color:#666">(${pct}%)</span></span>
+    </div>`;
+  });
+}
+
+function renderProds(prods){
+  const tot = prods.reduce((s,p)=>s+p.gmv,0);
+  const mx  = prods[0]?.gmv||1;
+  document.getElementById('pc').textContent = prods.length+' sản phẩm';
+  const tb = document.getElementById('prod-body');
+  tb.innerHTML = '';
+  let idx = 0;
+  const byG = {};
+  prods.forEach(p => { const g = p.g||'Khác'; if(!byG[g]) byG[g]=[]; byG[g].push(p); });
+  GO.forEach(g => {
+    if(!byG[g]) return;
+    byG[g].forEach(p => {
+      idx++;
+      const pct = tot > 0 ? (p.gmv/tot*100).toFixed(1) : 0;
+      const bw  = Math.round(p.gmv/mx*100);
+      const col = GC[p.g]||'#9CA3AF';
+      tb.innerHTML += `<tr>
+        <td style="color:#999;font-size:11px">${idx}</td>
+        <td style="font-size:12px"><span class="gtag" style="background:${col}22;color:${col}">${p.g}</span>${p.n}</td>
+        <td class="num">${fmtN(p.qty)}</td>
+        <td class="num" style="font-weight:500">${fmtN(p.gmv)}</td>
+        <td class="num">${pct}%</td>
+        <td><div class="bar-bg"><div class="bar-fill" style="width:${bw}%;background:${col}"></div></div></td>
+      </tr>`;
+    });
+  });
+}
+
+function setView(v, btn){
+  curV = v;
+  document.querySelectorAll('.btn').forEach(b => { if(b.getAttribute('onclick')?.startsWith('setView')) b.classList.remove('active'); });
+  btn.classList.add('active');
+  render();
+}
+function setM(m, btn){
+  curM = m;
+  document.querySelectorAll('.btn').forEach(b => { if(b.getAttribute('onclick')?.startsWith('setM') || b.onclick?.toString().includes('setM')) b.classList.remove('active'); });
+  // also handle dynamic buttons
+  document.querySelectorAll('#month-btns .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+loadData();
+</script>
+</body>
+</html>
