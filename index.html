@@ -211,7 +211,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 // CONFIG — đổi URL này sau khi publish Google Sheets của bạn
 // Để trống '' nếu muốn nhập qua UI
 // ══════════════════════════════════════════════════════════════
-const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbe4FOkZzo49IRKjRlwsyc1mloxXnyty17im4qoWBFpXqj-7CqbLc9MWEn_hGVgA/pub?gid=1986771646&single=true&output=csv';
+const DEFAULT_SHEET_URL = '';
 // Ví dụ:
 // const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms/export?format=csv&gid=0';
 
@@ -340,6 +340,62 @@ function parseCSV(text){
   });
 }
 
+// ══════════════════════════════════════════════════════════════
+// DATE PARSER — handles all formats Google Sheets might export:
+//   "2025-07-07 09:43"  (original text — ideal)
+//   "2025-07-07"        (date only)
+//   "7/7/2025 9:43:00"  (US locale from Sheets auto-format)
+//   "7/7/2025"          (short US date)
+//   "07/07/2025"        (zero-padded)
+//   "2025/07/07"        (ISO slash)
+//   45845               (Excel serial number as string)
+// Returns {ym:"2025-07", dd:7} or null if unparseable
+// ══════════════════════════════════════════════════════════════
+function parseOrderDate(s) {
+  if(!s) return null;
+  s = s.trim();
+
+  // Format 1: "2025-07-07 ..." or "2025-07-07" → ISO-like
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) {
+    const y=iso[1], m=iso[2], d=parseInt(iso[3]);
+    return {ym:`${y}-${m}`, dd:d};
+  }
+
+  // Format 2: "7/7/2025" or "07/07/2025" or "7/7/2025 9:43:00" (M/D/YYYY)
+  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(us) {
+    const m=String(us[2]).padStart(2,'0'), d=parseInt(us[1]);
+    // Note: Shopee VN format is D/M/YYYY but Google Sheets en-US exports M/D/YYYY
+    // We'll detect: if month value > 12 → it's D/M/YYYY, swap
+    let mo = parseInt(us[1]), dy = parseInt(us[2]);
+    if(mo > 12) { [mo, dy] = [dy, mo]; } // swap if month > 12
+    const mStr = String(mo).padStart(2,'0');
+    return {ym:`${us[3]}-${mStr}`, dd:dy};
+  }
+
+  // Format 3: "2025/07/07" (slash ISO)
+  const slashISO = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if(slashISO) {
+    return {ym:`${slashISO[1]}-${slashISO[2]}`, dd:parseInt(slashISO[3])};
+  }
+
+  // Format 4: Excel serial number (e.g., "45845")
+  const serial = parseInt(s);
+  if(!isNaN(serial) && serial > 40000 && serial < 60000) {
+    // Excel epoch: Jan 0, 1900 = day 0; but Excel has leap-year bug so day 1 = Jan 1 1900
+    const msPerDay = 86400000;
+    const excelEpoch = new Date(Date.UTC(1899,11,30)).getTime();
+    const date = new Date(excelEpoch + serial * msPerDay);
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth()+1).padStart(2,'0');
+    const d = date.getUTCDate();
+    return {ym:`${y}-${m}`, dd:d};
+  }
+
+  return null;
+}
+
 function parseAndRender(csv){
   const rows = parseCSV(csv);
   if(!rows.length){
@@ -355,6 +411,20 @@ function parseAndRender(csv){
     return;
   }
 
+  // Detect & warn about date format
+  const sampleDate = rows.find(r => r[COL.orderDate])? rows.find(r => r[COL.orderDate])[COL.orderDate] : '';
+  const dateOK = /^\d{4}-\d{2}-\d{2}/.test(sampleDate);
+  const isSerial = /^\d{5}$/.test(sampleDate.trim());
+  const isUS = /^\d{1,2}\/\d{1,2}\/\d{4}/.test(sampleDate);
+  let dateWarn = '';
+  if(isSerial) dateWarn = `⚠️ Cột ngày đang ở dạng số serial Excel (<b>${sampleDate}</b>). Report vẫn hoạt động nhưng khuyến nghị fix — xem hướng dẫn bên dưới.`;
+  else if(isUS) dateWarn = `⚠️ Cột ngày đang ở dạng M/D/YYYY (<b>${sampleDate}</b>). Report vẫn hoạt động, đã tự convert.`;
+  if(dateWarn){
+    const w = document.createElement('div');
+    w.innerHTML = `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;font-size:12px;color:#9a3412;margin-bottom:12px">${dateWarn}<br>→ Xem phần "Fix lỗi ngày tháng" trong file hướng dẫn setup.</div>`;
+    document.getElementById('report').insertBefore(w, document.querySelector('.controls'));
+  }
+
   // ── Build aggregations ─────────────────────────────────────
   const monthMap   = {};  // ym → {gmv, cgmv, vo, co}
   const dayMap     = {};  // ym → day → {gmv, cgmv, vo, co}
@@ -366,9 +436,9 @@ function parseAndRender(csv){
 
   rows.forEach(r => {
     const dateStr  = r[COL.orderDate]||'';
-    const ym       = dateStr.slice(0,7);  // "2025-07"
-    const dd       = parseInt(dateStr.slice(8,10))||0;
-    if(!ym || ym.length !== 7) return;
+    const parsed   = parseOrderDate(dateStr);
+    if(!parsed) return;
+    const {ym, dd} = parsed;
 
     const isCancelled = (r[COL.status]||'').trim() === CANCELLED_STATUS;
     const isGift      = (r[COL.product]||'').toUpperCase().startsWith('GIFT');
